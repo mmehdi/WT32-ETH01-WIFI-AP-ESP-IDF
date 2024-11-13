@@ -1,4 +1,10 @@
 # Create WiFi Access Point from WT32-ETH01
+![WT32-flash-1200x800](https://github.com/user-attachments/assets/ca99c114-1b62-4c56-9d71-fd1d0928915a)
+
+## Connection setup
+1) ESP-IDF
+2) CP2102 TTL USB programmer
+3) Connect 5V, GND, Rx to Tx, Tx to Rx
 
 ## How to put WT32-ETH01 into programming mode
 
