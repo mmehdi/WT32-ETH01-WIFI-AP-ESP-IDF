@@ -13,8 +13,8 @@
 #include "driver/gpio.h"
 
 // WiFi Access-Point Name and Password
-#define CONFIG_WIFI_SSID "ESP32-WIFI-AP-NAME"
-#define CONFIG_WIFI_PASSWORD "ESP32-WIFI-AP-PASS"
+#define CONFIG_WIFI_SSID "EntryphoneQV-AP"
+#define CONFIG_WIFI_PASSWORD "88708635"
 // WiFi Access-Point Visibility
 // 0: Visible
 // 1: Hidden
