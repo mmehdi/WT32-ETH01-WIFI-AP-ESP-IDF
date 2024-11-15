@@ -13,7 +13,7 @@
 #include "driver/gpio.h"
 
 // WiFi Access-Point Name and Password
-#define CONFIG_WIFI_SSID "ESP32-AP"
+#define CONFIG_WIFI_SSID "MyWIFI-AP"
 #define CONFIG_WIFI_PASSWORD "12345678"
 // WiFi Access-Point Visibility
 // 0: Visible
@@ -22,7 +22,7 @@
 // Ethernet PHY (LAN8720) Pins
 #define CONFIG_ETH_MDC_GPIO 23
 #define CONFIG_ETH_MDIO_GPIO 18
-#define CONFIG_ETH_PHY_ENABLE_GPIO 5
+#define CONFIG_ETH_PHY_ENABLE_GPIO 16
 // Ethernet PHY (LAN8720) Address
 #define CONFIG_ETH_PHY_ADDR 1
 // WiFi Connection Settings
