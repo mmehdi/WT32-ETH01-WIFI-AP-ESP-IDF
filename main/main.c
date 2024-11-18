@@ -14,7 +14,7 @@
 
 // WiFi Access-Point Name and Password
 #define CONFIG_WIFI_SSID "MyWIFI-AP"
-#define CONFIG_WIFI_PASSWORD "12345678"
+#define CONFIG_WIFI_PASSWORD "123456785"
 // WiFi Access-Point Visibility
 // 0: Visible
 // 1: Hidden
@@ -26,8 +26,8 @@
 // Ethernet PHY (LAN8720) Address
 #define CONFIG_ETH_PHY_ADDR 1
 // WiFi Connection Settings
-#define CONFIG_WIFI_CHANNEL 1
-#define CONFIG_MAX_STA_CONN 4
+#define CONFIG_WIFI_CHANNEL 11
+#define CONFIG_MAX_STA_CONN 2
 
 static const char *TAG = "eth2ap";
 static esp_eth_handle_t s_eth_handle = NULL;
@@ -36,10 +36,11 @@ static bool s_sta_is_connected = false;
 static bool s_ethernet_is_connected = false;
 static uint8_t s_eth_mac[6];
 
-#define FLOW_CONTROL_QUEUE_TIMEOUT_MS (100)
-#define FLOW_CONTROL_QUEUE_LENGTH (40)
+#define FLOW_CONTROL_QUEUE_TIMEOUT_MS (20)
+#define FLOW_CONTROL_QUEUE_LENGTH (100)
 #define FLOW_CONTROL_WIFI_SEND_TIMEOUT_MS (100)
 
+// Define flow_control_msg_t struct
 typedef struct
 {
     void *packet;
@@ -49,10 +50,8 @@ typedef struct
 // Forward packets from Wi-Fi to Ethernet
 static esp_err_t pkt_wifi2eth(void *buffer, uint16_t len, void *eb)
 {
-    if (s_ethernet_is_connected)
-    {
-        if (esp_eth_transmit(s_eth_handle, buffer, len) != ESP_OK)
-        {
+    if (s_ethernet_is_connected) {
+        if (esp_eth_transmit(s_eth_handle, buffer, len) != ESP_OK) {
             ESP_LOGE(TAG, "Ethernet send packet failed");
         }
     }
@@ -68,9 +67,9 @@ static esp_err_t pkt_eth2wifi(esp_eth_handle_t eth_handle, uint8_t *buffer, uint
     esp_err_t ret = ESP_OK;
     flow_control_msg_t msg = {
         .packet = buffer,
-        .length = len};
-    if (xQueueSend(flow_control_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) != pdTRUE)
-    {
+        .length = len
+    };
+    if (xQueueSend(flow_control_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) != pdTRUE) {
         ESP_LOGE(TAG, "send flow control message failed or timeout");
         free(buffer);
         ret = ESP_FAIL;
@@ -78,36 +77,28 @@ static esp_err_t pkt_eth2wifi(esp_eth_handle_t eth_handle, uint8_t *buffer, uint
     return ret;
 }
 
-// This task will fetch the packet from the queue, and then send out through Wi-Fi.
-// Wi-Fi handles packets slower than Ethernet, we might add some delay between each transmitting.
 static void eth2wifi_flow_control_task(void *args)
 {
     flow_control_msg_t msg;
-    esp_err_t res = 0;
-    uint32_t timeout = 0;
-    while (1)
-    {
-        if (xQueueReceive(flow_control_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) == pdTRUE)
-        {
-            timeout = 0;
-            if (s_sta_is_connected && msg.length)
-            {
-                do
-                {
-                    vTaskDelay(pdMS_TO_TICKS(timeout));
-                    timeout += 2;
-                    res = esp_wifi_internal_tx(WIFI_IF_AP, msg.packet, msg.length);
-                } while (res && timeout < FLOW_CONTROL_WIFI_SEND_TIMEOUT_MS);
-                if (res != ESP_OK)
-                {
-                    ESP_LOGE(TAG, "WiFi send packet failed: %s", esp_err_to_name(res));
+    int res = 0;
+    while (1) {
+        // Try to receive a packet from the queue
+        if (xQueueReceive(flow_control_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) == pdTRUE) {
+            if (s_sta_is_connected && msg.length) {
+                // Directly attempt to send the packet with no delays
+                res = esp_wifi_internal_tx(WIFI_IF_AP, msg.packet, msg.length);
+                if (res != ESP_OK) {
+                    ESP_LOGE(TAG, "WiFi send packet failed: %d", res);
                 }
             }
+            // Free the received packet buffer
             free(msg.packet);
         }
     }
     vTaskDelete(NULL);
 }
+
+
 
 // Event handler for Ethernet
 static void eth_event_handler(void *arg, esp_event_base_t event_base,
@@ -210,7 +201,15 @@ static void initialize_wifi(void)
         wifi_config.ap.authmode = WIFI_AUTH_OPEN;
     }
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT40));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
+    // Disable Wi-Fi power saving to ensure consistent high throughput
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
+    //ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(40));  // 19 dBm * 4 = 76
+    esp_err_t err = esp_wifi_set_max_tx_power(40);  // Set transmit power to 10 dBm
+    if (err != ESP_OK) {
+     ESP_LOGE(TAG, "Error setting max TX power: %d", err);
+    }
 }
 
 static esp_err_t initialize_flow_control(void)
@@ -221,7 +220,7 @@ static esp_err_t initialize_flow_control(void)
         ESP_LOGE(TAG, "create flow control queue failed");
         return ESP_FAIL;
     }
-    BaseType_t ret = xTaskCreate(eth2wifi_flow_control_task, "flow_ctl", 2048, NULL, (tskIDLE_PRIORITY + 2), NULL);
+    BaseType_t ret = xTaskCreate(eth2wifi_flow_control_task, "flow_ctl", 16000, NULL, (tskIDLE_PRIORITY + 2), NULL);
     if (ret != pdTRUE)
     {
         ESP_LOGE(TAG, "create flow control task failed");
